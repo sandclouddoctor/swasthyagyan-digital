@@ -5,11 +5,16 @@
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 
+function sslConfig(url) {
+  if (!url) return false;
+  // Disable SSL for local dev and Railway internal connections
+  if (url.includes("localhost") || url.includes(".railway.internal")) return false;
+  return { rejectUnauthorized: false };
+}
+
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("localhost")
-    ? false
-    : { rejectUnauthorized: false },
+  ssl: sslConfig(process.env.DATABASE_URL),
 });
 
 /* ── Schema initialisation ── */

@@ -4,11 +4,15 @@
 import pg from "pg";
 import { randomBytes } from "node:crypto";
 
+function sslConfig(url) {
+  if (!url) return false;
+  if (url.includes("localhost") || url.includes(".railway.internal")) return false;
+  return { rejectUnauthorized: false };
+}
+
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("localhost")
-    ? false
-    : { rejectUnauthorized: false },
+  ssl: sslConfig(process.env.DATABASE_URL),
 });
 
 /* ── Schema init (called once on server start from db.js initDb) ── */
