@@ -1,4 +1,4 @@
-import { categoryMeta } from "../shared/schemas.js";
+import { categoryMeta } from "./shared/schemas.js";
 
 function buildLabelMap(blocks, map = {}) {
   blocks.forEach((b) => {
