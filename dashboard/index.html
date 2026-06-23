@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Ledger · Remote Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f4f8; --card: #fff; --primary: #1a7f5a; --primary-d: #12573d;
+  --primary-lt: #e6f4ee; --text: #1e293b; --muted: #64748b; --border: #e2e8f0;
+  --row-alt: #f8fafc; --row-hover: #eaf6f0;
+  --shadow: 0 1px 3px rgba(0,0,0,.1); --shadow-md: 0 4px 8px rgba(0,0,0,.08);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13px; min-height: 100vh; }
+
+/* ── SETUP / LOGIN SCREENS ── */
+.screen { position: fixed; inset: 0; background: linear-gradient(135deg,#0f2d20 0%,#1a4d32 100%);
+  display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.screen.hidden { display: none; }
+.setup-box { background: #fff; border-radius: 16px; padding: 40px 36px;
+  width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+.setup-logo { font-size: 36px; margin-bottom: 6px; }
+.setup-box h2 { font-size: 22px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+.setup-box .org  { font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: .02em; }
+.setup-box .step { font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase;
+  letter-spacing: .08em; background: var(--primary-lt); padding: 3px 9px; border-radius: 99px;
+  display: inline-block; margin-bottom: 18px; }
+.setup-box label { display: block; font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; margin-top: 14px; }
+.setup-box input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 14px; outline: none; transition: border-color .14s, box-shadow .14s; }
+.setup-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,127,90,.15); }
+.setup-hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.setup-btn { width: 100%; margin-top: 20px; padding: 13px; border: none; border-radius: 8px;
+  background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: background .14s; letter-spacing: .01em; }
+.setup-btn:hover { background: var(--primary-d); }
+.setup-btn:disabled { opacity: .5; cursor: default; }
+.setup-err { color: #b91c1c; font-size: 12px; margin-top: 10px; min-height: 18px; }
+.change-link { font-size: 11px; color: var(--muted); text-align: right; margin-top: 8px; }
+.change-link a { color: var(--primary); cursor: pointer; text-decoration: underline; }
+.tab-row { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 6px; }
+.auth-tab { padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border-bottom: 2px solid transparent; color: var(--muted); margin-bottom: -1.5px; }
+.auth-tab.active { color: var(--primary); border-color: var(--primary); }
+
+/* ── APP SHELL ── */
+.hdr { background: var(--primary); color: #fff; padding: 0 20px;
+  display: flex; align-items: center; gap: 14px; height: 52px;
+  position: sticky; top: 0; z-index: 200; box-shadow: var(--shadow-md); }
+.hdr-title { font-size: 16px; font-weight: 700; }
+.hdr-sub { font-size: 11px; opacity: .75; margin-top: 1px; }
+.hdr-spacer { flex: 1; }
+.hdr-ts   { font-size: 11px; opacity: .65; white-space: nowrap; }
+.hdr-user { font-size: 12px; opacity: .85; white-space: nowrap; }
+.btn { padding: 5px 12px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 500; display: inline-flex; align-items: center;
+  gap: 5px; transition: all .14s; }
+.btn-ghost { background: rgba(255,255,255,.18); color: #fff; }
+.btn-ghost:hover { background: rgba(255,255,255,.3); }
+
+/* ── TABS ── */
+.tabs { display: flex; background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 20px; position: sticky; top: 52px; z-index: 100; }
+.tab { padding: 11px 18px; font-size: 13px; font-weight: 500; cursor: pointer;
+  border-bottom: 2px solid transparent; color: var(--muted); transition: all .14s; }
+.tab.active { color: var(--primary); border-color: var(--primary); }
+.tab:hover:not(.active) { color: var(--text); background: #f8fafc; }
+.tab.hidden { display: none; }
+.pane { display: none; }
+.pane.active { display: block; }
+
+/* ── TOOLBAR ── */
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px 20px; background: #fff; border-bottom: 1px solid var(--border); }
+.search-wrap { position: relative; flex: 1; min-width: 180px; }
+.search-wrap svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+.search-wrap input { width: 100%; padding: 6px 10px 6px 30px;
+  border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; }
+.search-wrap input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,127,90,.12); }
+select.flt { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; background: #fff; outline: none; }
+select.flt:focus { border-color: var(--primary); }
+.row-count { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+/* ── TABLE ── */
+.tbl-wrap { overflow: auto; max-height: calc(100vh - 165px); }
+table { width: 100%; border-collapse: collapse; }
+thead th { background: #1e293b; color: #fff; padding: 9px 11px; text-align: left;
+  white-space: nowrap; position: sticky; top: 0; z-index: 10; font-size: 12px;
+  font-weight: 600; cursor: pointer; user-select: none;
+  border-right: 1px solid rgba(255,255,255,.08); }
+thead th:hover { background: #334155; }
+thead th .sa { margin-left: 4px; opacity: .45; font-size: 10px; }
+thead th.sorted .sa { opacity: 1; }
+tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
+tbody tr:nth-child(4n+1),tbody tr:nth-child(4n+2) { background: #fff; }
+tbody tr:nth-child(4n+3),tbody tr:nth-child(4n+4) { background: var(--row-alt); }
+tbody tr:hover { background: var(--row-hover) !important; }
+tbody tr.exp-parent { background: var(--primary-lt) !important; }
+tbody td { padding: 8px 11px; vertical-align: middle; }
+td.mono { font-family: 'SF Mono','Consolas',monospace; font-size: 11px; color: var(--muted); }
+td strong { font-weight: 600; }
+
+/* ── BADGES ── */
+.badge { display: inline-flex; align-items: center; padding: 2px 7px;
+  border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.bg-green  { background:#dcfce7; color:#166534; }
+.bg-amber  { background:#fef3c7; color:#92400e; }
+.bg-red    { background:#fee2e2; color:#991b1b; }
+.bg-pink   { background:#fce7f3; color:#9d174d; }
+.bg-orange { background:#ffedd5; color:#9a3412; }
+.bg-yellow { background:#fef9c3; color:#854d0e; }
+.bg-purple { background:#ede9fe; color:#5b21b6; }
+.bg-blue   { background:#dbeafe; color:#1e40af; }
+.bg-slate  { background:#f1f5f9; color:#475569; }
+.card-chips { display:flex; flex-wrap:wrap; gap:3px; }
+
+/* ── EXPAND ROW ── */
+.exp-row td { padding: 0 !important; }
+.exp-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  padding: 14px 14px 14px 40px; background: #f8fafc; border-top: 1px dashed var(--border); }
+@media (max-width:700px) { .exp-inner { grid-template-columns: 1fr; } }
+.det-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; }
+.det-card h4 { font-size:11px; font-weight:700; color:var(--primary);
+  text-transform:uppercase; letter-spacing:.06em; margin-bottom:9px; }
+.det-grid { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; }
+.det-lbl { font-size:11px; color:var(--muted); padding:2px 0; }
+.det-val { font-size:11px; color:var(--text); font-weight:500; padding:2px 0; word-break:break-word; }
+.hcard { display:flex; align-items:center; gap:8px; padding:6px 9px;
+  background:var(--primary-lt); border-radius:6px; margin-top:5px; }
+.hcard-id { font-family:'SF Mono','Consolas',monospace; font-size:10px; color:var(--muted); margin-left:auto; }
+.no-cards { font-size:12px; color:var(--muted); margin-top:4px; }
+
+/* ── STATS ── */
+.stats { padding: 18px 20px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi { background:#fff; border-radius:10px; padding:16px 18px; box-shadow:var(--shadow); border-left:4px solid var(--primary); }
+.kpi.k-amber { border-color:#f59e0b; }
+.kpi.k-blue  { border-color:#3b82f6; }
+.kpi.k-purple{ border-color:#8b5cf6; }
+.kpi .lbl { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+.kpi .val { font-size:30px; font-weight:800; color:var(--primary); line-height:1; }
+.kpi.k-amber .val { color:#d97706; }
+.kpi.k-blue  .val { color:#2563eb; }
+.kpi .sub { font-size:11px; color:var(--muted); margin-top:3px; }
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ch-card { background:#fff; border-radius:10px; padding:16px; box-shadow:var(--shadow); }
+.ch-card.wide { grid-column:span 2; }
+.ch-card h3 { font-size:12px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+.ch-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.ch-wrap { position:relative; height:210px; }
+.ch-wrap.tall { height:260px; }
+@media (max-width:700px) { .charts-grid { grid-template-columns:1fr; } .ch-card.wide { grid-column:span 1; } }
+
+/* ── USERS ── */
+.users-pane { padding: 20px; }
+.users-pane h2 { font-size:16px; font-weight:700; margin-bottom:4px; }
+.users-pane .sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+.users-table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:var(--shadow); }
+.users-table th { background:#1e293b; color:#fff; padding:9px 14px; font-size:12px; font-weight:600; text-align:left; }
+.users-table td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; }
+.users-table tr:last-child td { border-bottom:none; }
+.users-table tr:hover td { background:var(--row-hover); }
+.pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; }
+.pill-admin   { background:#ede9fe; color:#5b21b6; }
+.pill-student { background:#dbeafe; color:#1e40af; }
+.pill-active  { background:#dcfce7; color:#166534; }
+.pill-disabled{ background:#fee2e2; color:#991b1b; }
+.btn-sm  { padding:4px 10px; font-size:12px; background:#fff; color:var(--primary); border:1px solid var(--border); border-radius:6px; cursor:pointer; }
+.btn-sm:hover { background:var(--primary-lt); }
+.btn-danger { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:6px;
+  padding:4px 10px; font-size:12px; cursor:pointer; }
+.btn-danger:hover { background:#fecaca; }
+
+/* ── MISC ── */
+.loading { display:flex; align-items:center; justify-content:center; gap:10px; padding:80px 20px; color:var(--muted); }
+.spin { width:22px; height:22px; border:3px solid var(--border); border-top-color:var(--primary);
+  border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.empty { text-align:center; padding:80px 20px; color:var(--muted); }
+.empty .ico { font-size:40px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<!-- ═══ STEP 1: SERVER URL ═══ -->
+<div class="screen" id="screenServer">
+  <div class="setup-box">
+    <div class="setup-logo">🏥</div>
+    <h2>Family Ledger</h2>
+    <p class="org">AIIMS BBSR · Village Adoption Programme</p>
+    <span class="step">Step 1 of 2 · Server</span>
+    <label>Server Address</label>
+    <input type="url" id="serverInput" placeholder="http://your-laptop-ip:4000"
+      autocomplete="off" spellcheck="false">
+    <p class="setup-hint">Enter your laptop's IP and port (e.g. <code>http://192.168.1.10:4000</code>)
+      or your Cloudflare tunnel URL.</p>
+    <div class="setup-err" id="serverErr"></div>
+    <button class="setup-btn" id="serverBtn" onclick="connectServer()">Connect →</button>
+  </div>
+</div>
+
+<!-- ═══ STEP 2: LOGIN ═══ -->
+<div class="screen hidden" id="screenLogin">
+  <div class="setup-box">
+    <div class="setup-logo">🔑</div>
+    <h2>Sign In</h2>
+    <p class="org" id="loginServerLabel"></p>
+    <span class="step" id="loginStep">Step 2 of 2 · Login</span>
+
+    <div class="tab-row">
+      <div class="auth-tab active" id="atab-login"    onclick="switchAuthTab('login')">Login</div>
+      <div class="auth-tab"        id="atab-register" onclick="switchAuthTab('register')">Create Account</div>
+    </div>
+
+    <!-- Login fields -->
+    <div id="loginFields">
+      <label>Username</label>
+      <input type="text" id="loginUser" placeholder="Your username" autocomplete="username">
+      <label>Password</label>
+      <input type="password" id="loginPass" placeholder="Your password" autocomplete="current-password">
+    </div>
+
+    <!-- Register fields -->
+    <div id="regFields" style="display:none">
+      <label>Full Name</label>
+      <input type="text" id="regDisplay" placeholder="Dr. Firstname Lastname" autocomplete="name">
+      <label>Username</label>
+      <input type="text" id="regUser" placeholder="firstname.lastname" autocomplete="username">
+      <label>Password</label>
+      <input type="password" id="regPass" placeholder="Choose a strong password" autocomplete="new-password">
+      <label>Confirm Password</label>
+      <input type="password" id="regConfirm" placeholder="Repeat password" autocomplete="new-password">
+    </div>
+
+    <div class="setup-err" id="loginErr"></div>
+    <button class="setup-btn" id="loginBtn" onclick="doAuth()">Sign in</button>
+    <p class="change-link"><a onclick="resetServer()">← Change server address</a></p>
+  </div>
+</div>
+
+<!-- ═══ APP SHELL ═══ -->
+<div class="hdr">
+  <div>
+    <div class="hdr-title">🏥 Family Ledger · Dashboard</div>
+    <div class="hdr-sub">AIIMS BBSR · Village Adoption Programme</div>
+  </div>
+  <div class="hdr-spacer"></div>
+  <span class="hdr-ts" id="ts"></span>
+  <span class="hdr-user" id="hdrUser"></span>
+  <button class="btn btn-ghost" id="csvBtn" onclick="exportCsv()">⬇ CSV</button>
+  <button class="btn btn-ghost" onclick="load()">⟳ Refresh</button>
+  <button class="btn btn-ghost" onclick="doLogout()">Sign out</button>
+</div>
+<div class="tabs">
+  <div class="tab active" id="tab-reg"   onclick="switchTab('reg')">📋 Family Register</div>
+  <div class="tab"        id="tab-stats" onclick="switchTab('stats')">📈 Statistics</div>
+  <div class="tab hidden" id="tab-users" onclick="switchTab('users')">👥 Users</div>
+</div>
+
+<!-- ── Register pane ── -->
+<div class="pane active" id="pane-reg">
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+      </svg>
+      <input type="text" id="srch" placeholder="Search ID, name, village, student…" oninput="render()">
+    </div>
+    <select class="flt" id="fVillage" onchange="render()"><option value="">All villages</option></select>
+    <select class="flt" id="fStudent" onchange="render()"><option value="">All students</option></select>
+    <select class="flt" id="fStatus" onchange="render()">
+      <option value="">All statuses</option>
+      <option value="done">Questionnaire done</option>
+      <option value="pending">Pending</option>
+    </select>
+    <span class="row-count" id="rc"></span>
+  </div>
+  <div class="tbl-wrap">
+    <div id="tbl"><div class="loading"><div class="spin"></div>Loading…</div></div>
+  </div>
+</div>
+
+<!-- ── Stats pane ── -->
+<div class="pane" id="pane-stats">
+  <div class="stats">
+    <div class="kpi-row" id="kpis"></div>
+    <div class="charts-grid" id="cg"></div>
+  </div>
+</div>
+
+<!-- ── Users pane ── -->
+<div class="pane" id="pane-users">
+  <div class="users-pane">
+    <h2>👥 User Accounts</h2>
+    <p class="sub">Registered student accounts. Disable to immediately invalidate all sessions.</p>
+    <div id="usersTbl"><div class="loading"><div class="spin"></div>Loading users…</div></div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────
+   STORAGE
+───────────────────────────────────────────── */
+const K = {
+  server:  'ledger-server-url',
+  session: 'ledger-session',
+  user:    'ledger-username',
+  display: 'ledger-display-name',
+  role:    'ledger-role',
+};
+
+const ls = { get: k => localStorage.getItem(k)||'', set: (k,v) => localStorage.setItem(k,v), rm: k => localStorage.removeItem(k) };
+
+function getBase()    { return ls.get(K.server).replace(/\/+$/,''); }
+function getToken()   { return ls.get(K.session); }
+function getDisplay() { return ls.get(K.display); }
+function getRole()    { return ls.get(K.role); }
+
+function saveAuth(d) {
+  ls.set(K.session, d.token);
+  ls.set(K.user, d.username);
+  ls.set(K.display, d.displayName || d.username);
+  ls.set(K.role, d.role);
+}
+function clearAuth() { [K.session, K.user, K.display, K.role].forEach(k => ls.rm(k)); }
+function clearAll()  { Object.values(K).forEach(k => ls.rm(k)); }
+
+/* ─────────────────────────────────────────────
+   AUTH FETCH
+───────────────────────────────────────────── */
+async function authFetch(path, opts = {}) {
+  const res = await fetch(getBase() + path, {
+    ...opts,
+    headers: { 'Authorization': `Bearer ${getToken()}`, ...(opts.headers||{}) },
+  });
+  if (res.status === 401) { clearAuth(); boot(); throw new Error('Session expired'); }
+  return res;
+}
+
+/* ─────────────────────────────────────────────
+   STEP 1 — SERVER URL
+───────────────────────────────────────────── */
+async function connectServer() {
+  const btn = document.getElementById('serverBtn');
+  const errEl = document.getElementById('serverErr');
+  const raw = document.getElementById('serverInput').value.trim().replace(/\/+$/,'');
+  errEl.textContent = '';
+  if (!raw) { errEl.textContent = 'Enter a server address.'; return; }
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    const res = await fetch(`${raw}/api/health`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) throw new Error('Unexpected response');
+    ls.set(K.server, raw);
+    showLogin();
+  } catch {
+    errEl.textContent = 'Cannot reach that server. Check the address and make sure the server is running.';
+  } finally { btn.disabled = false; btn.textContent = 'Connect →'; }
+}
+document.getElementById('serverInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') connectServer();
+});
+
+function resetServer() { clearAll(); boot(); }
+
+/* ─────────────────────────────────────────────
+   STEP 2 — LOGIN / REGISTER
+───────────────────────────────────────────── */
+let authMode = 'login';
+
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.getElementById('loginFields').style.display = mode === 'login' ? '' : 'none';
+  document.getElementById('regFields').style.display   = mode === 'register' ? '' : 'none';
+  document.getElementById('atab-login').classList.toggle('active', mode === 'login');
+  document.getElementById('atab-register').classList.toggle('active', mode === 'register');
+  document.getElementById('loginBtn').textContent = mode === 'login' ? 'Sign in' : 'Create Account';
+  document.getElementById('loginErr').textContent = '';
+}
+
+async function doAuth() {
+  const btn  = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  try {
+    let data;
+    if (authMode === 'login') {
+      const uname = document.getElementById('loginUser').value.trim();
+      const pass  = document.getElementById('loginPass').value;
+      if (!uname || !pass) { errEl.textContent = 'Enter username and password.'; return; }
+      const res = await fetch(`${getBase()}/api/auth/login`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username: uname, password: pass }),
+      });
+      data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Login failed.'; return; }
+    } else {
+      const display  = document.getElementById('regDisplay').value.trim();
+      const username = document.getElementById('regUser').value.trim();
+      const pass     = document.getElementById('regPass').value;
+      const confirm  = document.getElementById('regConfirm').value;
+      if (!display || !username || !pass) { errEl.textContent = 'Fill in all fields.'; return; }
+      if (pass !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
+      if (pass.length < 8)  { errEl.textContent = 'Password must be at least 8 characters.'; return; }
+      const res = await fetch(`${getBase()}/api/auth/register`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username, password: pass, displayName: display }),
+      });
+      data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Registration failed.'; return; }
+    }
+    saveAuth(data);
+    hideScreens();
+    applyRole();
+    load();
+  } catch(e) {
+    errEl.textContent = e.message === 'Failed to fetch' ? 'Cannot reach server.' : 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? 'Sign in' : 'Create Account';
+  }
+}
+
+['loginPass','regConfirm'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+});
+
+async function doLogout() {
+  try { await authFetch('/api/auth/logout', { method: 'POST' }); } catch {}
+  clearAuth();
+  DATA = [];
+  boot();
+}
+
+/* ─────────────────────────────────────────────
+   SCREENS
+───────────────────────────────────────────── */
+function showServerScreen() {
+  document.getElementById('screenServer').classList.remove('hidden');
+  document.getElementById('screenLogin').classList.add('hidden');
+  document.getElementById('serverInput').value = getBase();
+  setTimeout(() => document.getElementById('serverInput').focus(), 50);
+}
+
+function showLogin() {
+  document.getElementById('screenServer').classList.add('hidden');
+  document.getElementById('screenLogin').classList.remove('hidden');
+  document.getElementById('loginServerLabel').textContent = getBase();
+  setTimeout(() => document.getElementById('loginUser').focus(), 50);
+}
+
+function hideScreens() {
+  document.getElementById('screenServer').classList.add('hidden');
+  document.getElementById('screenLogin').classList.add('hidden');
+}
+
+function applyRole() {
+  const name = getDisplay();
+  const role = getRole();
+  document.getElementById('hdrUser').textContent = name ? `${name} (${role})` : '';
+  const ut = document.getElementById('tab-users');
+  if (role === 'admin') ut.classList.remove('hidden');
+  else ut.classList.add('hidden');
+}
+
+function boot() {
+  if (!getBase()) { showServerScreen(); return; }
+  if (!getToken()) { showLogin(); return; }
+  hideScreens();
+  applyRole();
+  load();
+}
+
+/* ─────────────────────────────────────────────
+   DATA
+───────────────────────────────────────────── */
+let DATA = [], sortCol = 'createdAt', sortDir = -1, expanded = null, charts = {}, statsBuilt = false;
+
+const CAT = {
+  antenatal:  { label:'Antenatal',    badge:'bg-pink',   color:'#ec4899' },
+  postnatal:  { label:'Postnatal',    badge:'bg-orange', color:'#f97316' },
+  underfive:  { label:'Under-5',      badge:'bg-yellow', color:'#eab308' },
+  chronic:    { label:'Chronic Dis.', badge:'bg-red',    color:'#ef4444' },
+  geriatric:  { label:'Geriatric',    badge:'bg-purple', color:'#8b5cf6' },
+  adolescent: { label:'Adolescent',   badge:'bg-blue',   color:'#3b82f6' },
+};
+const CAT_KEYS = Object.keys(CAT);
+
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function studentOf(f) { return f.createdBy || f.family?.answers?.studentName || ''; }
+function religionOf(f){ return f.family?.answers?.religion || ''; }
+function fmt(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}); }
+function countBy(arr, fn) { const m={}; arr.forEach(x=>{const k=fn(x); if(k!=null&&k!=='') m[k]=(m[k]||0)+1;}); return Object.fromEntries(Object.entries(m).sort((a,b)=>b[1]-a[1])); }
+
+async function load() {
+  document.getElementById('tbl').innerHTML = '<div class="loading"><div class="spin"></div>Loading families…</div>';
+  try {
+    const r = await authFetch('/api/families');
+    DATA = await r.json();
+    document.getElementById('ts').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    fillFilters(); render();
+    if (statsBuilt) { statsBuilt = false; buildStats(); }
+  } catch(e) {
+    if (e.message === 'Session expired') return;
+    document.getElementById('tbl').innerHTML = '<div class="empty"><div class="ico">⚠️</div><p>Cannot load families — check server connection.</p></div>';
+  }
+}
+
+function fillFilters() {
+  const villages = [...new Set(DATA.map(f=>f.village||'').filter(Boolean))].sort();
+  const students = [...new Set(DATA.map(studentOf).filter(Boolean))].sort();
+  const vEl = document.getElementById('fVillage'), sEl = document.getElementById('fStudent');
+  const curV = vEl.value, curS = sEl.value;
+  vEl.innerHTML = '<option value="">All villages</option>' + villages.map(v=>`<option${curV===v?' selected':''}>${esc(v)}</option>`).join('');
+  sEl.innerHTML = '<option value="">All students</option>' + students.map(s=>`<option${curS===s?' selected':''}>${esc(s)}</option>`).join('');
+}
+
+function filtered() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  const fv = document.getElementById('fVillage').value;
+  const fs = document.getElementById('fStudent').value;
+  const ft = document.getElementById('fStatus').value;
+  return DATA.filter(f => {
+    const hay = (f.id+' '+f.head+' '+(f.village||'')+' '+studentOf(f)).toLowerCase();
+    if (q && !hay.includes(q)) return false;
+    if (fv && f.village !== fv) return false;
+    if (fs && studentOf(f) !== fs) return false;
+    if (ft === 'done'    && !f.family?.completed) return false;
+    if (ft === 'pending' &&  f.family?.completed) return false;
+    return true;
+  }).sort((a,b) => {
+    let va, vb;
+    if (sortCol==='student')   { va=studentOf(a).toLowerCase(); vb=studentOf(b).toLowerCase(); }
+    else if (sortCol==='religion') { va=religionOf(a).toLowerCase(); vb=religionOf(b).toLowerCase(); }
+    else if (sortCol==='cards')   { va=(a.cards||[]).length; vb=(b.cards||[]).length; }
+    else { va=(a[sortCol]||'').toLowerCase?.()??a[sortCol]; vb=(b[sortCol]||'').toLowerCase?.()??b[sortCol]; }
+    return va<vb ? -sortDir : va>vb ? sortDir : 0;
+  });
+}
+
+const COLS = [
+  {key:'id',       label:'Family ID',    w:'106px'},
+  {key:'head',     label:'Head of HH'},
+  {key:'village',  label:'Village'},
+  {key:'student',  label:'Student'},
+  {key:'createdAt',label:'Registered',  w:'95px'},
+  {key:'religion', label:'Religion',    w:'86px'},
+  {key:'id_q',     label:'Questionnaire',w:'108px',nosort:true},
+  {key:'cards',    label:'Health Cards'},
+];
+
+function render() {
+  const rows = filtered();
+  document.getElementById('rc').textContent = rows.length+' / '+DATA.length+' families';
+  if (!rows.length) {
+    document.getElementById('tbl').innerHTML = '<div class="empty"><div class="ico">📋</div><p>No families match the current filters.</p></div>';
+    return;
+  }
+  let h = '<table><thead><tr>';
+  COLS.forEach(c => {
+    const isSorted = sortCol===c.key;
+    const arrow = c.nosort ? '' : `<span class="sa">${isSorted?(sortDir===1?'▲':'▼'):'⇅'}</span>`;
+    h += `<th class="${isSorted?'sorted':''}" ${c.nosort?'':``onclick="sort('${c.key}')"``} style="${c.w?'width:'+c.w:''}">${c.label}${arrow}</th>`;
+  });
+  h += '</tr></thead><tbody>';
+  rows.forEach(f => {
+    const isExp = expanded===f.id;
+    const cards = f.cards||[];
+    const byType = {};
+    cards.forEach(c => { byType[c.category]=(byType[c.category]||0)+1; });
+    const chips = CAT_KEYS.filter(k=>byType[k]).map(k=>`<span class="badge ${CAT[k].badge}">${CAT[k].label}&nbsp;×${byType[k]}</span>`).join('')||'<span style="color:var(--muted)">—</span>';
+    const qBadge = f.family?.completed ? '<span class="badge bg-green">✓ Done</span>' : '<span class="badge bg-amber">⏳ Pending</span>';
+    h += `<tr onclick="toggleExp('${esc(f.id)}')" class="${isExp?'exp-parent':''}">
+      <td class="mono">${esc(f.id)}</td>
+      <td><strong>${esc(f.head||'—')}</strong></td>
+      <td>${esc(f.village||'—')}</td>
+      <td>${esc(studentOf(f)||'—')}</td>
+      <td style="color:var(--muted)">${fmt(f.createdAt)}</td>
+      <td>${esc(religionOf(f)||'—')}</td>
+      <td>${qBadge}</td>
+      <td><div class="card-chips">${chips}</div></td>
+    </tr>`;
+    if (isExp) h += `<tr class="exp-row"><td colspan="${COLS.length}">${expandBlock(f)}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  document.getElementById('tbl').innerHTML = h;
+}
+
+function expandBlock(f) {
+  const a = f.family?.answers||{};
+  const cards = f.cards||[];
+  const fields = [
+    ['Student',a.studentName],['Roll No.',a.rollNo],['Village',a.village||f.village],
+    ['Phone',a.hohPhone],['Religion',a.religion],['House type',a.houseType],
+    ['No. of rooms',a.numRooms],['Water supply',a.waterType],['Toilet type',a.toiletType],
+    ['Cooking fuel',Array.isArray(a.cookingFuel)?a.cookingFuel.join(', '):a.cookingFuel],
+    ['Pregnant women',a.numPregnant],['Under-5 children',a.numUnder5],
+    ['Births last yr',a.birthsLastYr],['Deaths last yr',a.deathsLastYr],
+  ].filter(([,v])=>v!=null&&v!=='');
+  const det = fields.map(([l,v])=>`<span class="det-lbl">${esc(l)}</span><span class="det-val">${esc(v)}</span>`).join('');
+  const cardItems = cards.length===0
+    ? '<p class="no-cards">No health cards added yet.</p>'
+    : CAT_KEYS.flatMap(k=>cards.filter(c=>c.category===k).map(c=>{
+        const ca=c.answers||{}; const name=ca.name||ca.childName||c.id;
+        const age=ca.age?`, ${ca.age}y`:''; const sex=ca.sex?` · ${ca.sex}`:'';
+        return `<div class="hcard"><span class="badge ${CAT[k].badge}">${CAT[k].label}</span><strong>${esc(name)}${esc(age)}${esc(sex)}</strong><span class="hcard-id">${esc(c.id)}</span></div>`;
+      })).join('');
+  return `<div class="exp-inner">
+    <div class="det-card"><h4>📋 Family Details</h4><div class="det-grid">${det||'<span class="no-cards">No answers yet.</span>'}</div></div>
+    <div class="det-card"><h4>🏥 Health Cards (${cards.length})</h4>${cardItems}</div>
+  </div>`;
+}
+
+function toggleExp(id) { expanded = expanded===id ? null : id; render(); }
+function sort(col)     { sortDir = sortCol===col ? -sortDir : 1; sortCol = col; render(); }
+
+/* ─────────────────────────────────────────────
+   STATS
+───────────────────────────────────────────── */
+function buildStats() {
+  const d = DATA;
+  const totalCards = d.reduce((s,f)=>s+(f.cards||[]).length,0);
+  const completedQ = d.filter(f=>f.family?.completed).length;
+  const nVillages  = new Set(d.map(f=>f.village).filter(Boolean)).size;
+  const nStudents  = new Set(d.map(studentOf).filter(Boolean)).size;
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi"><div class="lbl">Families</div><div class="val">${d.length}</div><div class="sub">${nVillages} village${nVillages!==1?'s':''}</div></div>
+    <div class="kpi k-amber"><div class="lbl">Questionnaires Done</div><div class="val" style="color:#d97706">${completedQ}</div><div class="sub">${d.length?Math.round(completedQ/d.length*100):0}% complete</div></div>
+    <div class="kpi k-blue"><div class="lbl">Health Cards</div><div class="val" style="color:#2563eb">${totalCards}</div><div class="sub">across all categories</div></div>
+    <div class="kpi k-purple"><div class="lbl">Students Active</div><div class="val" style="color:#7c3aed">${nStudents}</div><div class="sub">contributors</div></div>
+  `;
+  document.getElementById('cg').innerHTML=`
+    <div class="ch-card wide"><h3><span class="ch-dot" style="background:var(--primary)"></span>Families per Village</h3><div class="ch-wrap tall"><canvas id="cVillage"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#8b5cf6"></span>Health Cards by Type</h3><div class="ch-wrap"><canvas id="cCards"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#f59e0b"></span>Questionnaire Status</h3><div class="ch-wrap"><canvas id="cStatus"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#ef4444"></span>Religion</h3><div class="ch-wrap"><canvas id="cReligion"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#3b82f6"></span>House Type</h3><div class="ch-wrap"><canvas id="cHouse"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#06b6d4"></span>Water Supply</h3><div class="ch-wrap"><canvas id="cWater"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#10b981"></span>Water Treatment</h3><div class="ch-wrap"><canvas id="cWaterTx"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#a855f7"></span>Toilet Type</h3><div class="ch-wrap"><canvas id="cToilet"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#f97316"></span>Cooking Fuel</h3><div class="ch-wrap"><canvas id="cFuel"></canvas></div></div>
+    <div class="ch-card"><h3><span class="ch-dot" style="background:#ec4899"></span>Hospitalisation last year</h3><div class="ch-wrap"><canvas id="cHosp"></canvas></div></div>
+  `;
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
+  const ans = d.map(f=>f.family?.answers||{});
+  const PAL = ['#1a7f5a','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#10b981','#64748b'];
+  const vc = countBy(d, f=>f.village||'Unknown');
+  bar('cVillage',Object.keys(vc),Object.values(vc),'#1a7f5a');
+  const cc={};
+  d.forEach(f=>(f.cards||[]).forEach(c=>{cc[c.category]=(cc[c.category]||0)+1;}));
+  bar('cCards',CAT_KEYS.map(k=>CAT[k].label),CAT_KEYS.map(k=>cc[k]||0),CAT_KEYS.map(k=>CAT[k].color));
+  donut('cStatus',['Done','Pending'],[completedQ,d.length-completedQ],['#22c55e','#fbbf24']);
+  const rc2=countBy(ans,a=>a.religion||'Unknown');
+  donut('cReligion',Object.keys(rc2),Object.values(rc2));
+  const hc=countBy(ans,a=>a.houseType||'Unknown');
+  donut('cHouse',Object.keys(hc),Object.values(hc),['#2563eb','#16a34a','#d97706','#94a3b8']);
+  const wsc=countBy(ans,a=>a.waterType||'Unknown');
+  bar('cWater',Object.keys(wsc),Object.values(wsc),'#06b6d4');
+  const wtc=countBy(ans,a=>a.waterTreatment||'Unknown');
+  bar('cWaterTx',Object.keys(wtc),Object.values(wtc),'#10b981');
+  const ttc=countBy(ans,a=>a.toiletType||'Unknown');
+  donut('cToilet',Object.keys(ttc),Object.values(ttc),['#7c3aed','#4f46e5','#94a3b8']);
+  const fc={};
+  ans.forEach(a=>{const fuels=Array.isArray(a.cookingFuel)?a.cookingFuel:[a.cookingFuel]; fuels.filter(Boolean).forEach(fu=>{fc[fu]=(fc[fu]||0)+1;});});
+  bar('cFuel',Object.keys(fc),Object.values(fc),'#f97316');
+  const hpc=countBy(ans,a=>a.hospitalised||'Unknown');
+  donut('cHosp',Object.keys(hpc),Object.values(hpc),['#ef4444','#22c55e','#94a3b8']);
+  statsBuilt=true;
+
+  function bar(id,labels,data,colors) {
+    const bgc=labels.map((_,i)=>Array.isArray(colors)?colors[i]:colors);
+    charts[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:bgc,borderRadius:4,borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10},maxRotation:35}},y:{grid:{color:'#f1f5f9'},ticks:{font:{size:10},precision:0},beginAtZero:true}}}});
+  }
+  function donut(id,labels,data,colors) {
+    const bgc=colors||labels.map((_,i)=>PAL[i%PAL.length]);
+    charts[id]=new Chart(document.getElementById(id),{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:bgc,borderWidth:2,borderColor:'#fff'}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'54%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8,boxWidth:10}}}}});
+  }
+}
+
+/* ─────────────────────────────────────────────
+   USERS TAB
+───────────────────────────────────────────── */
+async function loadUsers() {
+  document.getElementById('usersTbl').innerHTML='<div class="loading"><div class="spin"></div>Loading…</div>';
+  try {
+    const r = await authFetch('/api/users');
+    const users = await r.json();
+    if (!users.length) { document.getElementById('usersTbl').innerHTML='<div class="empty"><div class="ico">👤</div><p>No users yet.</p></div>'; return; }
+    let h=`<table class="users-table"><thead><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Last Login</th><th>Status</th><th>Action</th></tr></thead><tbody>`;
+    users.forEach(u=>{
+      const rp=u.role==='admin'?'<span class="pill pill-admin">Admin</span>':'<span class="pill pill-student">Student</span>';
+      const sp=u.disabled?'<span class="pill pill-disabled">Disabled</span>':'<span class="pill pill-active">Active</span>';
+      const ab=u.disabled
+        ?`<button class="btn-sm" onclick="toggleUser('${esc(u.username)}',false)">Enable</button>`
+        :`<button class="btn-danger" onclick="toggleUser('${esc(u.username)}',true)">Disable</button>`;
+      h+=`<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.displayName)}</td><td>${rp}</td><td style="color:var(--muted)">${fmt(u.lastLogin)}</td><td>${sp}</td><td>${u.role==='admin'?'<span style="color:var(--muted)">—</span>':ab}</td></tr>`;
+    });
+    h+='</tbody></table>';
+    document.getElementById('usersTbl').innerHTML=h;
+  } catch(e) {
+    if (e.message!=='Session expired') document.getElementById('usersTbl').innerHTML='<div class="empty"><div class="ico">⚠️</div><p>Could not load users.</p></div>';
+  }
+}
+
+async function toggleUser(username, disabled) {
+  try {
+    await authFetch(`/api/users/${username}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({disabled})});
+    loadUsers();
+  } catch(e) { if (e.message!=='Session expired') alert('Failed to update user.'); }
+}
+
+/* ─────────────────────────────────────────────
+   CSV EXPORT
+───────────────────────────────────────────── */
+async function exportCsv() {
+  try {
+    const res = await authFetch('/api/export/families.csv');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='families.csv'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  } catch {}
+}
+
+/* ─────────────────────────────────────────────
+   TABS
+───────────────────────────────────────────── */
+function switchTab(tab) {
+  ['reg','stats','users'].forEach(t=>{
+    document.getElementById('tab-'+t)?.classList.toggle('active',t===tab);
+    document.getElementById('pane-'+t)?.classList.toggle('active',t===tab);
+  });
+  if (tab==='stats' && !statsBuilt && DATA.length) buildStats();
+  if (tab==='users') loadUsers();
+}
+
+/* ─────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────── */
+boot();
+</script>
+</body>
+</html>
